@@ -1,13 +1,18 @@
+import numpy
+import imageio
+from PIL import Image, ImageDraw, ImageOps
+import scipy.ndimage
+import matplotlib.pyplot as plt
 from random import *
 import math
 import argparse
-
-from PIL import Image, ImageDraw, ImageOps
-
+from matplotlib import cm
 from filters import *
 from strokesort import *
 import perlin
 from util import *
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+numpy.seterr(divide='ignore', invalid='ignore')
 
 no_cv = False
 export_path = "output/out.svg"
@@ -22,11 +27,11 @@ try:
     import numpy as np
     import cv2
 except:
-    print "Cannot import numpy/openCV. Switching to NO_CV mode."
+    print ("Cannot import numpy/openCV. Switching to NO_CV mode.")
     no_cv = True
 
 def find_edges(IM):
-    print "finding edges..."
+    print ("finding edges...")
     if no_cv:
         #appmask(IM,[F_Blur])
         appmask(IM,[F_SobelX,F_SobelY])
@@ -39,7 +44,7 @@ def find_edges(IM):
 
 
 def getdots(IM):
-    print "getting contour points..."
+    print ("getting contour points...")
     PX = IM.load()
     dots = []
     w,h = IM.size
@@ -58,7 +63,7 @@ def getdots(IM):
     return dots
     
 def connectdots(dots):
-    print "connecting contour points..."
+    print ("connecting contour points...")
     contours = []
     for y in range(len(dots)):
         for x,v in dots[y]:
@@ -91,7 +96,7 @@ def connectdots(dots):
 
 
 def getcontours(IM,sc=2):
-    print "generating contours..."
+    print ("generating contours...")
     IM = find_edges(IM)
     IM1 = IM.copy()
     IM2 = IM.rotate(-90,expand=True).transpose(Image.FLIP_LEFT_RIGHT)
@@ -128,7 +133,7 @@ def getcontours(IM,sc=2):
 
 
 def hatch(IM,sc=16):
-    print "hatching..."
+    print ("hatching...")
     PX = IM.load()
     w,h = IM.size
     lg1 = []
@@ -168,25 +173,17 @@ def hatch(IM,sc=16):
     return lines
 
 
-def sketch(path):
-    IM = None
-    possible = [path,"images/"+path,"images/"+path+".jpg","images/"+path+".png","images/"+path+".tif"]
-    for p in possible:
-        try:
-            IM = Image.open(p)
-            break
-        except:
-            pass
+def sketch(img_arr):
+    IM = Image.fromarray(np.uint8(cm.gist_earth(img_arr)*255))
     w,h = IM.size
-
     IM = IM.convert("L")
-    IM=ImageOps.autocontrast(IM,10)
+    IM = ImageOps.autocontrast(IM,10)
 
     lines = []
     if draw_contours:
-        lines += getcontours(IM.resize((resolution/contour_simplify,resolution/contour_simplify*h/w)),contour_simplify)
+        lines += getcontours(IM.resize((int(resolution/contour_simplify),int(resolution/contour_simplify*h/w))),contour_simplify)
     if draw_hatch:
-        lines += hatch(IM.resize((resolution/hatch_size,resolution/hatch_size*h/w)),hatch_size)
+        lines += hatch(IM.resize((int(resolution/hatch_size),int(resolution/hatch_size*h/w))),hatch_size)
 
     lines = sortlines(lines)
     if show_bitmap:
@@ -199,13 +196,12 @@ def sketch(path):
     f = open(export_path,'w')
     f.write(makesvg(lines))
     f.close()
-    print len(lines), "strokes."
-    print "done."
+    print (len(lines), "strokes.")
+    print ("done.")
     return lines
 
-
 def makesvg(lines):
-    print "generating svg file..."
+    print ("generating svg file...")
     out = '<svg xmlns="http://www.w3.org/2000/svg" version="1.1">'
     for l in lines:
         l = ",".join([str(p[0]*0.5)+","+str(p[1]*0.5) for p in l])
@@ -213,7 +209,58 @@ def makesvg(lines):
     out += '</svg>'
     return out
 
+def dodge(front,back):
+    result=front*255/(255-back) 
+    result[result>255]=255
+    result[back==255]=255
+    return result.astype('uint8')
 
+def grayscale(rgb):
+    return numpy.dot(rgb[...,:3], [0.299, 0.587, 0.114])
+
+def binarize_image(r, threshold):
+    """Binarize an image."""
+    image = r
+    image = binarize_array(image, threshold)
+    return image
+
+def binarize_array(numpy_array, threshold=235):
+    """Binarize a numpy array."""
+    for i in range(len(numpy_array)):
+        for j in range(len(numpy_array[0])):
+            if numpy_array[i][j] > threshold:
+                numpy_array[i][j] = 255
+            else:
+                numpy_array[i][j] = 0
+    return numpy_array
+
+def get_parser():
+    """Get parser object for script xy.py."""
+    parser = ArgumentParser(description=__doc__,
+                            formatter_class=ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-i", "--inumpyut",
+                        dest="inumpyut",
+                        help="read this file",
+                        metavar="FILE",
+                        required=True)
+    parser.add_argument("-o", "--output",
+                        dest="output",
+                        help="write binarized file hre",
+                        metavar="FILE",
+                        required=True)
+    parser.add_argument("--threshold",
+                        dest="threshold",
+                        default=200,
+                        type=int,
+                        help="Threshold when to show white")
+    return parser
+
+def drawborder(img, sigma=4):
+    gray_img = grayscale(img)
+    inverted_img = 255-gray_img
+    b = scipy.ndimage.filters.gaussian_filter(inverted_img,sigma)
+    result = dodge(b,gray_img)
+    return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Convert image to vectorized line drawing for plotters.')
@@ -225,6 +272,14 @@ if __name__ == "__main__":
         default=export_path,action='store',nargs='?',type=str,
         help='Output path.')
 
+    parser.add_argument('-t','--threshold',dest='threshold',
+        default=235,action='store',nargs='?',type=int,
+        help='Threshold value.')
+
+    parser.add_argument('-s','--sigma',dest='sigma',
+        default=4,action='store',nargs='?',type=int,
+        help='Sigma value.')
+
     parser.add_argument('-b','--show_bitmap',dest='show_bitmap',
         const = not show_bitmap,default= show_bitmap,action='store_const',
         help="Display bitmap preview.")
@@ -232,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument('-nc','--no_contour',dest='no_contour',
         const = draw_contours,default= not draw_contours,action='store_const',
         help="Don't draw contours.")
-       
+
     parser.add_argument('-nh','--no_hatch',dest='no_hatch',
         const = draw_hatch,default= not draw_hatch,action='store_const',
         help='Disable hatching.')
@@ -241,16 +296,16 @@ if __name__ == "__main__":
         const = not no_cv,default= no_cv,action='store_const',
         help="Don't use openCV.")
 
-
     parser.add_argument('--hatch_size',dest='hatch_size',
         default=hatch_size,action='store',nargs='?',type=int,
         help='Patch size of hatches. eg. 8, 16, 32')
+
     parser.add_argument('--contour_simplify',dest='contour_simplify',
         default=contour_simplify,action='store',nargs='?',type=int,
         help='Level of contour simplification. eg. 1, 2, 3')
 
     args = parser.parse_args()
-    
+
     export_path = args.output_path
     draw_hatch = not args.no_hatch
     draw_contours = not args.no_contour
@@ -258,4 +313,11 @@ if __name__ == "__main__":
     contour_simplify = args.contour_simplify
     show_bitmap = args.show_bitmap
     no_cv = args.no_cv
-    sketch(args.input_path)
+    threshold = args.threshold
+    img_path = args.input_path
+    sigma = args.sigma
+
+    img = imageio.imread(img_path)
+    img_border = drawborder(img, sigma)
+    img_bw = binarize_image(img_border, threshold)
+    sketch(img_bw)

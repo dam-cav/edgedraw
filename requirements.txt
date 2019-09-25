@@ -1,0 +1,7 @@
+numpy
+imageio
+Pillow
+scipy
+argparse
+matplotlib
+filters

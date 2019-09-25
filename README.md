@@ -1,22 +1,27 @@
-# linedraw
-Convert images to vectorized line drawings for plotters.
-![Alt text](/screenshots/1.png?raw=true "")
+# edgedraw
+[linedraw](https://github.com/LingDong-/linedraw) fork with changes to get compatibility with python 3.
 
-- Exports polyline-only svg file with optimized stroke order for plotters;
-- Sketchy style powered by Perlin noise;
-- Contour-only or hatch-only modes.
+Differences from the original repository:
 
-## Dependencies
-Python 2, PIL/Pillow, numpy, OpenCV (Optional for better performance)
+- Doesn't work with *.tif* files;
+- Added compatibility with *.png* images with transparent background;
+- Only the silhouettes of the figures are sketched;
+
+In particular, this is no longer designed specifically for plotters but actually serves to achieve a nice effect in redesigning icon silhouettes.
+
+
+
+Convert images to vectorized line drawings.
+![Alt text](/screenshots/screen.png?raw=true "")
 
 ## Usage
 Convert an image to line drawing and export .SVG format:
 ```shell
-$ python linedraw.py -i input.jpg -o output.svg
+$ python linedraw.py -i input.jpg -o output.svg -t 235 -s 4
 ```
 Command specs:
 ```
-usage: linedraw.py [-h] [-i [INPUT_PATH]] [-o [OUTPUT_PATH]] [-b] [-nc] [-nh]
+usage: linedraw.py [-h] [-i [INPUT_PATH]] [-o [OUTPUT_PATH]] [-b] [-t [INT_VALUE]] [-s [INT_VALUE]] [-nc] [-nh]
                    [--no_cv] [--hatch_size [HATCH_SIZE]]
                    [--contour_simplify [CONTOUR_SIMPLIFY]]
 
@@ -29,6 +34,12 @@ optional arguments:
   -o [OUTPUT_PATH], --output [OUTPUT_PATH]
                         Output path.
   -b, --show_bitmap     Display bitmap preview.
+  -t [INT_VALUE], --threshold [INT_VALUE]
+                        Defines the brightness to which the lightest shapes are ignored.
+                        (Use value between 200 and 250 to get good result!)
+  -s [INT_VALUE], --sigma [INT_VALUE]
+                        Defines how tolerant the detection of the edges is.
+                        (Use value between 1 and 10 to get good result!)
   -nc, --no_contour     Don't draw contours.
   -nh, --no_hatch       Disable hatching.
   --no_cv               Don't use openCV.
@@ -37,13 +48,3 @@ optional arguments:
   --contour_simplify [CONTOUR_SIMPLIFY]
                         Level of contour simplification. eg. 1, 2, 3
 ```
-Python:
-```python
-import linedraw
-lines = linedraw.sketch("path/to/img.jpg")  # return list of polylines, eg.
-                                            # [[(x,y),(x,y),(x,y)],[(x,y),(x,y),...],...]
-                                            
-linedraw.visualize(lines)                   # simulates plotter behavior
-                                            # draw the lines in order using turtle graphics.
-```
-
